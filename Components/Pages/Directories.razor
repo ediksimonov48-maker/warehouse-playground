@@ -1,0 +1,282 @@
+@page "/directories"
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using Playground.Data
+@using Playground.Models
+@using Playground.Services
+@inject DirectoryService DirectoryService
+@inject IJSRuntime JS
+
+<PageTitle>Справочники</PageTitle>
+
+<h1>Справочники</h1>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert alert-info">@message</div>
+}
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <section class="card h-100">
+            <div class="card-body">
+                <h2 class="card-title">Производители</h2>
+
+                <EditForm Model="manufacturerForm" FormName="manufacturer-form" Enhance="false" OnValidSubmit="SaveManufacturerAsync">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label class="form-label" for="manufacturer-name">Наименование</label>
+                        <InputText id="manufacturer-name" class="form-control" @bind-Value="manufacturerForm.Name" />
+                        <ValidationMessage For="@(() => manufacturerForm.Name)" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="manufacturer-description">Описание</label>
+                        <InputTextArea id="manufacturer-description" class="form-control" @bind-Value="manufacturerForm.Description" />
+                    </div>
+                    <button class="btn btn-primary me-2" type="submit">
+                        @(manufacturerForm.Id == 0 ? "Добавить" : "Сохранить")
+                    </button>
+                    @if (manufacturerForm.Id != 0)
+                    {
+                        <button class="btn btn-secondary" type="button" @onclick="CancelManufacturerEdit">Отмена</button>
+                    }
+                </EditForm>
+
+                <hr />
+
+                @if (manufacturers.Count == 0)
+                {
+                    <p>Производители пока не добавлены.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Наименование</th>
+                                    <th>Даты</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var manufacturer in manufacturers)
+                                {
+                                    <tr>
+                                        <td>
+                                            <strong>@manufacturer.Name</strong>
+                                            <div class="text-muted small">@manufacturer.Description</div>
+                                        </td>
+                                        <td class="small">
+                                            Создан: @manufacturer.CreatedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm")<br />
+                                            Изменён: @manufacturer.UpdatedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm")
+                                        </td>
+                                        <td class="text-nowrap">
+                                            <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => EditManufacturer(manufacturer)">Изменить</button>
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteManufacturerAsync(manufacturer.Id)">Удалить</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </section>
+    </div>
+
+    <div class="col-lg-4">
+        <section class="card h-100">
+            <div class="card-body">
+                <h2 class="card-title">Типы техники</h2>
+
+                <EditForm Model="equipmentTypeForm" FormName="equipment-type-form" Enhance="false" OnValidSubmit="SaveEquipmentTypeAsync">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label class="form-label" for="equipment-type-name">Наименование</label>
+                        <InputText id="equipment-type-name" class="form-control" @bind-Value="equipmentTypeForm.Name" />
+                        <ValidationMessage For="@(() => equipmentTypeForm.Name)" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="equipment-type-description">Описание</label>
+                        <InputTextArea id="equipment-type-description" class="form-control" @bind-Value="equipmentTypeForm.Description" />
+                    </div>
+                    <button class="btn btn-primary me-2" type="submit">
+                        @(equipmentTypeForm.Id == 0 ? "Добавить" : "Сохранить")
+                    </button>
+                    @if (equipmentTypeForm.Id != 0)
+                    {
+                        <button class="btn btn-secondary" type="button" @onclick="CancelEquipmentTypeEdit">Отмена</button>
+                    }
+                </EditForm>
+
+                <hr />
+
+                @if (equipmentTypes.Count == 0)
+                {
+                    <p>Типы техники пока не добавлены.</p>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Наименование</th>
+                                    <th>Даты</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var equipmentType in equipmentTypes)
+                                {
+                                    <tr>
+                                        <td>
+                                            <strong>@equipmentType.Name</strong>
+                                            <div class="text-muted small">@equipmentType.Description</div>
+                                        </td>
+                                        <td class="small">
+                                            Создан: @equipmentType.CreatedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm")<br />
+                                            Изменён: @equipmentType.UpdatedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm")
+                                        </td>
+                                        <td class="text-nowrap">
+                                            <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => EditEquipmentType(equipmentType)">Изменить</button>
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteEquipmentTypeAsync(equipmentType.Id)">Удалить</button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private List<Manufacturer> manufacturers = [];
+    private List<EquipmentType> equipmentTypes = [];
+    private Manufacturer manufacturerForm = new();
+    private EquipmentType equipmentTypeForm = new();
+    private string? message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        var data = await DirectoryService.GetAsync();
+        manufacturers = data.Manufacturers;
+        equipmentTypes = data.EquipmentTypes;
+    }
+
+    private async Task SaveManufacturerAsync()
+    {
+        try
+        {
+            await DirectoryService.SaveManufacturerAsync(manufacturerForm);
+            manufacturerForm = new();
+            message = "Производитель сохранён.";
+            await LoadDataAsync();
+        }
+        catch (DbUpdateException)
+        {
+            message = "Не удалось сохранить производителя. Возможно, такое наименование уже существует.";
+        }
+    }
+
+    private void EditManufacturer(Manufacturer manufacturer)
+    {
+        manufacturerForm = new Manufacturer
+        {
+            Id = manufacturer.Id,
+            Name = manufacturer.Name,
+            Description = manufacturer.Description,
+            CreatedAt = manufacturer.CreatedAt,
+            UpdatedAt = manufacturer.UpdatedAt
+        };
+        message = null;
+    }
+
+    private void CancelManufacturerEdit()
+    {
+        manufacturerForm = new();
+        message = null;
+    }
+
+    private async Task DeleteManufacturerAsync(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Удалить выбранного производителя?"))
+        {
+            return;
+        }
+
+        var deleted = await DirectoryService.DeleteManufacturerAsync(id);
+        if (deleted)
+        {
+            message = "Производитель удалён.";
+            await LoadDataAsync();
+        }
+        else
+        {
+            message = "Производитель не найден или используется товарами.";
+        }
+    }
+
+    private async Task SaveEquipmentTypeAsync()
+    {
+        try
+        {
+            await DirectoryService.SaveEquipmentTypeAsync(equipmentTypeForm);
+            equipmentTypeForm = new();
+            message = "Тип техники сохранён.";
+            await LoadDataAsync();
+        }
+        catch (DbUpdateException)
+        {
+            message = "Не удалось сохранить тип техники. Возможно, такое наименование уже существует.";
+        }
+    }
+
+    private void EditEquipmentType(EquipmentType equipmentType)
+    {
+        equipmentTypeForm = new EquipmentType
+        {
+            Id = equipmentType.Id,
+            Name = equipmentType.Name,
+            Description = equipmentType.Description,
+            CreatedAt = equipmentType.CreatedAt,
+            UpdatedAt = equipmentType.UpdatedAt
+        };
+        message = null;
+    }
+
+    private void CancelEquipmentTypeEdit()
+    {
+        equipmentTypeForm = new();
+        message = null;
+    }
+
+    private async Task DeleteEquipmentTypeAsync(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Удалить выбранный тип техники?"))
+        {
+            return;
+        }
+
+        var deleted = await DirectoryService.DeleteEquipmentTypeAsync(id);
+        if (deleted)
+        {
+            message = "Тип техники удалён.";
+            await LoadDataAsync();
+        }
+        else
+        {
+            message = "Тип техники не найден или используется товарами.";
+        }
+    }
+}

@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: warehouse-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: warehouse
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - warehouse-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d warehouse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: warehouse-app
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__WarehouseDb: Host=db;Port=5432;Database=warehouse;Username=postgres;Password=${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - playground-app-keys:/root/.aspnet/DataProtection-Keys
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  warehouse-postgres-data:
+  playground-app-keys:

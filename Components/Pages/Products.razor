@@ -1,0 +1,387 @@
+@page "/products"
+@rendermode InteractiveServer
+
+@using Microsoft.EntityFrameworkCore
+@using Playground.Data
+@using Playground.Models
+@using Playground.Services
+@inject ProductService ProductService
+@inject IJSRuntime JS
+
+<PageTitle>Товары</PageTitle>
+
+<h1>Список позиций</h1>
+
+@if (!string.IsNullOrWhiteSpace(message))
+{
+    <div class="alert alert-info">@message</div>
+}
+
+<button class="btn btn-primary mb-4" type="button" @onclick="OpenCreateForm">Добавить позицию</button>
+
+@if (showProductForm)
+{
+    <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title">@(productForm.Id == 0 ? "Новая позиция" : "Редактирование позиции")</h2>
+                    <button class="btn-close" type="button" aria-label="Закрыть" @onclick="CancelEdit"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="productForm" FormName="product-form" Enhance="false" OnValidSubmit="SaveProductAsync">
+                        <DataAnnotationsValidator />
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Модель</label>
+                                <InputText class="form-control" @bind-Value="productForm.Model" />
+                                <ValidationMessage For="@(() => productForm.Model)" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Цена</label>
+                                <InputNumber class="form-control" @bind-Value="productForm.Price" />
+                                <ValidationMessage For="@(() => productForm.Price)" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Путь к фотографии</label>
+                                <InputText class="form-control" @bind-Value="productForm.PhotoPath" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Производитель</label>
+                                <InputSelect class="form-select" @bind-Value="productForm.ManufacturerId">
+                                    <option value="0">Выберите производителя</option>
+                                    @foreach (var manufacturer in manufacturers)
+                                    {
+                                        <option value="@manufacturer.Id">@manufacturer.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Тип техники</label>
+                                <InputSelect class="form-select" @bind-Value="productForm.EquipmentTypeId">
+                                    <option value="0">Выберите тип</option>
+                                    @foreach (var equipmentType in equipmentTypes)
+                                    {
+                                        <option value="@equipmentType.Id">@equipmentType.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Страна поставки</label>
+                                <div class="input-group">
+                                    <InputSelect class="form-select" @bind-Value="productForm.CountryId">
+                                        <option value="0">Выберите страну</option>
+                                        @foreach (var country in countries)
+                                        {
+                                            <option value="@country.Id">@country.Name</option>
+                                        }
+                                    </InputSelect>
+                                    <button class="btn btn-outline-secondary" type="button" @onclick="ToggleCountryForm">Добавить</button>
+                                </div>
+                            </div>
+                            @if (showCountryForm)
+                            {
+                                <div class="col-md-6">
+                                    <label class="form-label">Новая страна</label>
+                                    <div class="input-group">
+                                        <InputText class="form-control" @bind-Value="newCountryName" />
+                                        <button class="btn btn-outline-primary" type="button" @onclick="AddCountryAsync">Сохранить</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <div class="modal-footer px-0 pb-0 mt-4">
+                            <button class="btn btn-secondary" type="button" @onclick="CancelEdit">Отмена</button>
+                            <button class="btn btn-primary" type="submit">Сохранить позицию</button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-backdrop fade show"></div>
+}
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h2 class="card-title">Фильтры и поиск</h2>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">Поиск</label>
+                <InputText class="form-control" @bind-Value="searchText" @bind-Value:after="ApplyFilters" placeholder="Тип, производитель или модель" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Производитель</label>
+                <InputSelect class="form-select" @bind-Value="selectedManufacturerId" @bind-Value:after="ApplyFilters">
+                    <option value="">Все</option>
+                    @foreach (var manufacturer in AvailableManufacturers)
+                    {
+                        <option value="@manufacturer.Id">@manufacturer.Name</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Тип</label>
+                <InputSelect class="form-select" @bind-Value="selectedEquipmentTypeId" @bind-Value:after="ApplyFilters">
+                    <option value="">Все</option>
+                    @foreach (var equipmentType in AvailableEquipmentTypes)
+                    {
+                        <option value="@equipmentType.Id">@equipmentType.Name</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Цена от</label>
+                <InputNumber class="form-control" @bind-Value="minPrice" @bind-Value:after="ApplyFilters" />
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Цена до</label>
+                <InputNumber class="form-control" @bind-Value="maxPrice" @bind-Value:after="ApplyFilters" />
+            </div>
+        </div>
+        <button class="btn btn-link px-0" type="button" @onclick="ClearFilters">Сбросить фильтры</button>
+    </div>
+</div>
+
+@if (filteredProducts.Count == 0)
+{
+    <p>Подходящие позиции не найдены.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Модель</th>
+                    <th>Тип</th>
+                    <th>Производитель</th>
+                    <th>Страна</th>
+                    <th>Цена</th>
+                    <th>Дата изменения</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var product in filteredProducts)
+                {
+                    <tr>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(product.PhotoPath))
+                            {
+                                <img src="@product.PhotoPath" alt="@product.Model" style="max-width: 80px; max-height: 60px;" />
+                            }
+                            <div>@product.Model</div>
+                        </td>
+                        <td>@product.EquipmentType.Name</td>
+                        <td>@product.Manufacturer.Name</td>
+                        <td>@product.Country.Name</td>
+                        <td>@product.Price.ToString("N2")</td>
+                        <td>@product.UpdatedAt.LocalDateTime.ToString("dd.MM.yyyy HH:mm")</td>
+                        <td class="text-nowrap">
+                            <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => EditProduct(product)">Изменить</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteProductAsync(product.Id)">Удалить</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Product> products = [];
+    private List<Product> filteredProducts = [];
+    private List<Manufacturer> manufacturers = [];
+    private List<EquipmentType> equipmentTypes = [];
+    private List<Country> countries = [];
+    private Product productForm = new();
+    private string? message;
+    private string searchText = string.Empty;
+    private int? selectedManufacturerId;
+    private int? selectedEquipmentTypeId;
+    private decimal? minPrice;
+    private decimal? maxPrice;
+    private bool showCountryForm;
+    private bool showProductForm;
+    private string newCountryName = string.Empty;
+
+    private IEnumerable<Manufacturer> AvailableManufacturers =>
+        manufacturers.Where(x => !selectedEquipmentTypeId.HasValue ||
+            products.Any(product => product.ManufacturerId == x.Id && product.EquipmentTypeId == selectedEquipmentTypeId));
+
+    private IEnumerable<EquipmentType> AvailableEquipmentTypes =>
+        equipmentTypes.Where(x => !selectedManufacturerId.HasValue ||
+            products.Any(product => product.EquipmentTypeId == x.Id && product.ManufacturerId == selectedManufacturerId));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        var data = await ProductService.GetPageDataAsync();
+        products = data.Products;
+        manufacturers = data.Manufacturers;
+        equipmentTypes = data.EquipmentTypes;
+        countries = data.Countries;
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        if (selectedManufacturerId.HasValue && !AvailableManufacturers.Any(x => x.Id == selectedManufacturerId))
+        {
+            selectedManufacturerId = null;
+        }
+
+        if (selectedEquipmentTypeId.HasValue && !AvailableEquipmentTypes.Any(x => x.Id == selectedEquipmentTypeId))
+        {
+            selectedEquipmentTypeId = null;
+        }
+
+        var query = products.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            var search = searchText.Trim();
+            query = query.Where(x => x.Model.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || x.Manufacturer.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || x.EquipmentType.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || x.Country.Name.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (selectedManufacturerId.HasValue)
+        {
+            query = query.Where(x => x.ManufacturerId == selectedManufacturerId);
+        }
+
+        if (selectedEquipmentTypeId.HasValue)
+        {
+            query = query.Where(x => x.EquipmentTypeId == selectedEquipmentTypeId);
+        }
+
+        if (minPrice.HasValue)
+        {
+            query = query.Where(x => x.Price >= minPrice);
+        }
+
+        if (maxPrice.HasValue)
+        {
+            query = query.Where(x => x.Price <= maxPrice);
+        }
+
+        filteredProducts = query.ToList();
+    }
+
+    private void ClearFilters()
+    {
+        searchText = string.Empty;
+        selectedManufacturerId = null;
+        selectedEquipmentTypeId = null;
+        minPrice = null;
+        maxPrice = null;
+        ApplyFilters();
+    }
+
+    private async Task SaveProductAsync()
+    {
+        if (string.IsNullOrWhiteSpace(productForm.Model)
+            || productForm.Price < 0.01m
+            || productForm.ManufacturerId == 0
+            || productForm.EquipmentTypeId == 0
+            || productForm.CountryId == 0)
+        {
+            message = "Заполните модель, цену, производителя, тип и страну.";
+            return;
+        }
+
+        try
+        {
+            await ProductService.SaveAsync(productForm);
+            productForm = new();
+            showProductForm = false;
+            showCountryForm = false;
+            message = "Позиция сохранена.";
+            await LoadDataAsync();
+        }
+        catch (DbUpdateException)
+        {
+            message = "Не удалось сохранить позицию. Проверьте выбранные справочники и введённые данные.";
+        }
+    }
+
+    private void EditProduct(Product product)
+    {
+        productForm = new Product
+        {
+            Id = product.Id,
+            Model = product.Model,
+            PhotoPath = product.PhotoPath,
+            Price = product.Price,
+            ManufacturerId = product.ManufacturerId,
+            EquipmentTypeId = product.EquipmentTypeId,
+            CountryId = product.CountryId,
+            CreatedAt = product.CreatedAt,
+            UpdatedAt = product.UpdatedAt
+        };
+        showProductForm = true;
+        showCountryForm = false;
+        message = null;
+    }
+
+    private void OpenCreateForm()
+    {
+        productForm = new();
+        showProductForm = true;
+        showCountryForm = false;
+        message = null;
+    }
+
+    private void CancelEdit()
+    {
+        productForm = new();
+        showProductForm = false;
+        showCountryForm = false;
+        message = null;
+    }
+
+    private async Task DeleteProductAsync(int id)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", "Удалить выбранную позицию?"))
+        {
+            return;
+        }
+
+        if (await ProductService.DeleteAsync(id))
+        {
+            message = "Позиция удалена.";
+            await LoadDataAsync();
+        }
+    }
+
+    private void ToggleCountryForm()
+    {
+        showCountryForm = !showCountryForm;
+        newCountryName = string.Empty;
+    }
+
+    private async Task AddCountryAsync()
+    {
+        var name = newCountryName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            message = "Введите название страны.";
+            return;
+        }
+
+        var country = await ProductService.AddCountryAsync(name);
+        countries.Add(country);
+        countries = countries.OrderBy(x => x.Name).ToList();
+        productForm.CountryId = country.Id;
+        newCountryName = string.Empty;
+        showCountryForm = false;
+        message = "Страна добавлена или выбрана.";
+    }
+}

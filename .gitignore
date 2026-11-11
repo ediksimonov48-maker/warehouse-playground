@@ -1,0 +1,13 @@
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Local configuration and secrets
+appsettings.Local.json
+.env
+
+# Visual Studio files
+TestResults/
